@@ -482,3 +482,36 @@ history, so the router saw less session-continuity signal than production.
 explanation for the router batch's higher cache-hit rate (64% vs ~47–49%),
 though causality may run either way.
 
+
+---
+
+## Section 7 — Step decomposition: original vs replays
+
+A record = one LLM step within a turn; all four datasets cover the same 136
+turns, but the genie splits each turn into a different number of steps.
+Record counts therefore differ without any data loss.
+
+| Dataset | Records | Steps/turn | Tool calls | Single-step turns | Steps distribution (steps: traces) |
+| ------- | ------- | ---------- | ---------- | ----------------- | ---------------------------------- |
+| Original (Sep 15) | 533 | 3.9 | 494 | 5/136 | 1:5, 2:41, 3:31, 4:12, 5:19, 6:12, 7:3, 8:5, 9:4, 10:3, 11:1 |
+| Router replay | 226 | 1.7 | 101 | 61/136 | 1:61, 2:64, 3:8, 4:2, 5:1 |
+| Luna replay | 230 | 1.7 | 110 | 68/136 | 1:68, 2:53, 3:11, 4:3, 11:1 |
+| Terra replay | 226 | 1.7 | 103 | 58/136 | 1:58, 2:72, 3:4, 4:1, 8:1 |
+
+Why replays need ~2.3× fewer steps per turn:
+
+1. **History embedding does the tool work for free.** The constructed replay
+message embeds prior turns' tool results in `[Tool result: …]` blocks; the
+original genie had to call tools to obtain that information (494 calls vs
+~100 in replays). Hence 58–68 replay turns answered in a single step with no
+tool calls, vs only 5 in the original.
+2. **Different genie version.** Original ran app `0.1519.0`; all replays ran
+`0.1663.0-DEV-preview-us-1731`.
+3. **Different models.** Original = fixed `azure/gpt-5.2`; replays = gpt-5.6
+family.
+
+Implication for comparison: replays are not just "same agent, new answers" —
+they decompose turns differently. The trace-level rollup (§5: any negative
+step per trace) is the honest comparison unit; per-record verdict rates
+(§1–§3) should be read with the denominator difference in mind (226/230 vs
+533 records).
