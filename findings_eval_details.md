@@ -515,3 +515,94 @@ they decompose turns differently. The trace-level rollup (§5: any negative
 step per trace) is the honest comparison unit; per-record verdict rates
 (§1–§3) should be read with the denominator difference in mind (226/230 vs
 533 records).
+
+---
+
+## Section 8 — Original trajectories evaluated with all three judges
+
+Date: 2026-09-22. The Sept-15 production dataset (533 records / 136 traces)
+re-evaluated with the current pipeline (logging-step skip, fixed goal label,
+8000-token judge budget) under all three judges. The legacy gpt-4.1-only
+results predating these fixes were moved to
+`results/full_evaluation_results_legacy_gpt41.json`.
+
+Result files: `results/full_evaluation_results.json` (gpt-4.1),
+`results/full_evaluation_results_gemini-3.8-flash.json`,
+`results/full_evaluation_results_glm-5.3.json` — 533 rows each, 101 rows
+`Skipped` (logging-only steps, no judge calls).
+
+### Verdicts (533 records)
+
+| Metric | gpt-4.1 | gemini-3.8-flash | glm-5.3 | 3-way agreement |
+| ------ | ------- | ---------------- | ------- | --------------- |
+| Groundedness | 425 Yes / 7 No | 424 / 8 | 424 / 8 | 97% |
+| Efficiency | 379 Eff / 53 Red | 391 / 41 | 393 / 39 | 93% |
+| Adaptivity | 411 N/A / 10 A / 11 NA | 411 / 6 / 15 | 411 / 8 / 13 | 99% |
+| Goal alignment | 404 Aligned / 28 Mis | 397 / 35 | 390 / 42 | 89% |
+
+Majority-vote negative rates (of 533): groundedness 0.9%, efficiency 7.5%,
+adaptivity 2.4%, misaligned 6.6%. Vs the head replays (per record, router
+batch): groundedness 0.9% vs 6.6% and misaligned 6.6% vs 23.9% (main much
+better), but efficiency 7.5% vs 1.8% — the original is WORSE on redundancy,
+precisely because it takes more steps per turn (§7): more steps = more
+redundant-check opportunities, and also more real tool grounding. The branch
+comparison on quality is therefore mixed: main wins groundedness/alignment,
+loses efficiency.
+
+### Trace-level results (judge majority per step, any-negative per trace; 136 traces)
+
+| Metric | gpt-4.1 | gemini | glm | Majority |
+| ------ | ------- | ------ | --- | -------- |
+| Groundedness (any No) | 5% (7/136) | 6% (8/136) | 6% (8/136) | 4% (5/136) |
+| Efficiency (any Redundant) | 26% (35/136) | 21% (28/136) | 23% (31/136) | 20% (27/136) |
+| Adaptivity (any Not Adaptive) | 7% (10/136) | 8% (11/136) | 7% (10/136) | 7% (10/136) |
+| Goal alignment (any Misaligned) | 16% (22/136) | 19% (26/136) | 23% (31/136) | 21% (28/136) |
+
+(Per-judge counts are per-trace any-negative for that judge alone; Majority
+is the 2-of-3 rollup.) Vs the head replays at trace level (§5): main is far
+better on groundedness (4% vs 11–15% any-No) and goal alignment (16% vs
+38–49% misaligned), worse on efficiency (18% vs 1–7% any-Redundant) — same
+mixed picture as the record-level view. Note the three judges nearly coincide
+on main, unlike on the replay batches — a hint that the head replays are
+intrinsically harder to judge (constructed-history inputs), not just lower
+quality.
+
+### Production-side cost (the trajectories themselves)
+
+Sum of `costDetails.total` over the 533 original records: **$23.31** (fixed
+azure/gpt-5.2, Sept 15) — vs replay batches $4.34 / $0.48 / $4.44 (§4). The
+original cost more per turn partly because it averaged 3.9 steps/turn vs 1.7
+in replays (§7). Verified against the gpt-5.2 price card ($1.75/M input,
+$0.175/M cached, $14/M output): recomputed from tokens (12.37M in / 3.50M
+cached / 0.074M out) = $23.31, matching Langfuse's measured cost to the cent.
+
+---
+
+## Section 9 — Four-backend trace-level comparison (main gpt-5.2 vs head replays)
+
+Trace-level rollup (judge majority per step; a trace is negative on a metric
+if ANY of its steps is negative; n=136 source traces each). Latency is median
+per turn; cost is per full 136-trace replay / the 533-record main run.
+
+| Backend | Ungrounded | Redundant | Tool errors → recovered (judge majority) | Misaligned | Median turn latency | Cost |
+| ------- | ---------- | --------- | ------------ | ---------- | ------------------- | ---- |
+| **main / gpt-5.2** (production) | **4%** | 20% | 21 errors → 10 recovered / 11 not | **21%** | 21.1s | $23.31 (measured) |
+| head / router (mixed 5.6) | 11% | 2% | 0 errors | 38% | 11.0s | $4.34 |
+| head / luna (fixed) | 15% | 7% | 7 errors → 4 recovered / 3 not | 48% | 8.7s | $0.48 |
+| head / terra (fixed) | 15% | 1% | 5 errors → 1 recovered / 4 not | 49% | 8.3s | $4.44 |
+
+Reading:
+- **Head wins on efficiency and latency/cost, main wins on groundedness and
+  alignment.** On error recovery: main hit 21 tool errors and recovered from
+  10 (48%); head terra recovered 1/5, head luna 4/7, head router had no
+  errors to recover from. Head replays are ~2× faster and 5–50× cheaper per
+  turn, with
+  far less redundancy (1–7% vs 20% of traces with a redundant step) — but
+  they are less grounded (11–15% vs 4% of traces) and much more often
+  misaligned (38–49% vs 21%).
+- Caveat: this is not a clean model comparison. main ran the production
+  agent (app 0.1519.0, gpt-5.2) on real multi-turn sessions; the head runs
+  ran a newer agent (0.1663.0-preview) with constructed single-message
+  history. Agent-version and input-format effects are confounded with the
+  model difference. Within head (§5) is the clean model comparison; this
+  table answers "head vs production as deployed".
