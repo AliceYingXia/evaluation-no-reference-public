@@ -374,6 +374,26 @@ are 1.5–2.1M tokens per batch.
 | §3 Terra  | 226     | **$4.44** | ≈ router; pulls ~50% more input tokens than the router batch |
 
 
+### Cost per turn (distribution across the 136 turns)
+
+Per-turn cost = sum of that trace's `agent_chat_completion` record costs.
+Main is Langfuse-measured; head batches are recomputed from tokens with the
+official price card above.
+
+
+| Batch | Total | Median | Mean | p95 | Max |
+| ----- | ----- | ------ | ---- | --- | --- |
+| main / gpt-5.2 | $23.31 | $0.120 | $0.171 | $0.473 | $0.638 |
+| head / router | $4.34 | $0.028 | $0.037 | $0.116 | $0.197 |
+| head / luna | $0.48 | $0.003 | $0.004 | $0.008 | $0.021 |
+| head / terra | $4.44 | $0.028 | $0.033 | $0.068 | $0.127 |
+
+
+Distributions are right-skewed everywhere (max ≈ 4–7× median): most turns
+are cheap, a few long tool-chain turns dominate spend. Main's median turn
+costs ~4× the head router/terra median — mostly its 3.9 steps/turn vs 1.7
+(§7).
+
 ### Latency (per turn: message send → full SSE reply)
 
 
